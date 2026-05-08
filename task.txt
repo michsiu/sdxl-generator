@@ -1,4 +1,4 @@
-PROMPT=A nude girl,(((nude:1.3))),Japan girl, (breasts)
+PROMPT=A young girl wearing casual denim cut-off shorts, standing in a sunny outdoor setting, with a playful expression, her hair flowing in a gentle breeze, surrounded by colorful wildflowers, the background featuring a clear blue sky with fluffy white clouds, soft natural lighting, detailed textures on the shorts and skin, realistic proportions, vibrant yet harmonious colors, summer ambiance, artistic yet photorealistic style.
 NEGATIVE_PROMPT=blurry, low quality, ugly
 STEPS=20
 GUIDANCE_SCALE=7.5
