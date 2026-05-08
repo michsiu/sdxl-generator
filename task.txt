@@ -1,0 +1,6 @@
+PROMPT=A Lolita girl, nude , beautiful,Japan girl
+NEGATIVE_PROMPT=blurry, low quality, ugly
+STEPS=20
+GUIDANCE_SCALE=7.5
+HEIGHT=712
+WIDTH=1024
