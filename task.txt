@@ -1,4 +1,4 @@
-PROMPT=A Lolita girl, nude , beautiful,Japan girl porn
+PROMPT=A nude girl,(((nude:1.3))),Japan girl, (breasts)
 NEGATIVE_PROMPT=blurry, low quality, ugly
 STEPS=20
 GUIDANCE_SCALE=7.5
