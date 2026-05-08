@@ -1,0 +1,146 @@
+name: SDXL Image Generation
+
+on:
+  push:
+    paths:
+      - 'task.txt'
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: '图片描述'
+        required: true
+        default: 'a cat sitting on a table'
+
+jobs:
+  parse-config:
+    runs-on: ubuntu-latest
+    outputs:
+      prompt: ${{ steps.parse.outputs.PROMPT }}
+      negative_prompt: ${{ steps.parse.outputs.NEGATIVE_PROMPT }}
+      steps: ${{ steps.parse.outputs.STEPS }}
+      guidance_scale: ${{ steps.parse.outputs.GUIDANCE_SCALE }}
+      height: ${{ steps.parse.outputs.HEIGHT }}
+      width: ${{ steps.parse.outputs.WIDTH }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Parse task.txt
+        id: parse
+        run: |
+          if [ -f "task.txt" ]; then
+            while IFS='=' read -r key value; do
+              [[ $key =~ ^#.*$ ]] && continue
+              [[ -z $key ]] && continue
+              value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^"//;s/"$//')
+              echo "${key}=${value}" >> $GITHUB_OUTPUT
+            done < task.txt
+          fi
+
+  generate-image:
+    needs: parse-config
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Cache Hugging Face models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: sdxl-models-${{ runner.os }}
+
+      - name: 🔍 Check cache status
+        run: |
+          echo "=== 缓存目录大小 ==="
+          du -sh ~/.cache/huggingface/ 2>/dev/null || echo "无缓存"
+          echo ""
+          echo "=== 模型文件列表 ==="
+          find ~/.cache/huggingface/ -name "*.safetensors" -o -name "*.bin" 2>/dev/null | head -10 || echo "无模型文件"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-sdxl-${{ runner.os }}
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install diffusers accelerate transformers
+
+      - name: Generate image
+        run: |
+          python -c "
+          import torch
+          from diffusers import StableDiffusionXLPipeline
+          from datetime import datetime
+
+          prompt = '''${{ needs.parse-config.outputs.prompt || 'a cat sitting on a table' }}'''
+          negative_prompt = '''${{ needs.parse-config.outputs.negative_prompt || '' }}'''
+          steps = ${{ needs.parse-config.outputs.steps || 20 }}
+          guidance_scale = ${{ needs.parse-config.outputs.guidance_scale || 7.5 }}
+          height = ${{ needs.parse-config.outputs.height || 512 }}
+          width = ${{ needs.parse-config.outputs.width || 512 }}
+
+          print('=' * 60)
+          print('SDXL 图片生成')
+          print('=' * 60)
+          print(f'提示词: {prompt}')
+          print(f'步数: {steps}')
+          print(f'尺寸: {width}x{height}')
+
+          model_id = 'stabilityai/stable-diffusion-xl-base-1.0'
+          print(f'\n正在加载模型: {model_id}')
+
+          pipe = StableDiffusionXLPipeline.from_pretrained(
+              model_id,
+              torch_dtype=torch.float32,
+              use_safetensors=True,
+              variant='fp16'
+          )
+          pipe.enable_attention_slicing()
+
+          print('正在生成图片（CPU 较慢，请耐心等待）...')
+          
+          image = pipe(
+              prompt=prompt,
+              negative_prompt=negative_prompt if negative_prompt else None,
+              num_inference_steps=steps,
+              guidance_scale=guidance_scale,
+              height=height,
+              width=width
+          ).images[0]
+
+          timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+          filename = f'sdxl_output_{timestamp}.png'
+          image.save(filename)
+          print(f'图片已保存: {filename}')
+          print('=' * 60)
+          "
+
+      - name: Upload image to artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdxl-output
+          path: sdxl_output_*.png
+          retention-days: 7
+
+      - name: Push image to repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add sdxl_output_*.png
+          git commit -m "📝 Update SDXL image [skip ci]" || echo "No changes to commit"
+          git push
